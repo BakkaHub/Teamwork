@@ -160,3 +160,90 @@ class ClubDatabase {
     public static ClubDatabase getInstance() {
         return Holder.INSTANCE;
     }
+ // ---------- Проверка данных ----------
+
+    // Возвращает причину отказа или null, если данные в порядке
+    public static String validationError(User u) {
+        if (u == null || u.getName() == null || u.getName().trim().isEmpty()) {
+            return "пустое имя";
+        }
+        if (u.getAge() < MIN_AGE || u.getAge() > MAX_AGE) {
+            return "клуб для молодёжи от " + MIN_AGE + " до " + MAX_AGE + " лет";
+        }
+        if (!CHANNELS.contains(u.getChannel())) {
+            return "неизвестный канал связи «" + u.getChannel() + "»";
+        }
+        if (u.getContact() == null || u.getContact().trim().isEmpty()) {
+            return "не указан контакт";
+        }
+        return null;
+    }
+
+    public static List<String> getChannels() {
+        return CHANNELS;
+    }
+
+    // ---------- Регистрация, изменение, удаление ----------
+
+    public synchronized boolean register(User user) {
+        String error = validationError(user);
+        if (error != null) {
+            System.out.println("Отказ: " + (user == null ? "?" : user.getName()) + " — " + error);
+            return false;
+        }
+        reloadIfChanged();
+        int i = indexOfContact(user.getContact());
+        if (i >= 0) {
+            if (users.get(i).getName().equals(user.getName())) {
+                // тот же человек уже есть в файле: обновляем запись
+                users.set(i, user);
+                save();
+                System.out.println("Уже в базе (данные обновлены): " + user);
+                return true;
+            }
+            System.out.println("Отказ: " + user.getName() + " — контакт "
+                    + user.getContact() + " уже зарегистрирован");
+            return false;
+        }
+        users.add(user);
+        save();
+        System.out.println("Зарегистрирован: " + user);
+        return true;
+    }
+
+    // Замена записи обновлённой (для редактирования)
+    public synchronized boolean replaceUser(User old, User updated) {
+        if (old == null || validationError(updated) != null) {
+            return false;
+        }
+        reloadIfChanged();
+        int i = indexOfContact(old.getContact());
+        if (i < 0) {
+            return false;
+        }
+        int other = indexOfContact(updated.getContact());
+        if (other >= 0 && other != i) {
+            return false;   // новый контакт уже занят другим
+        }
+        users.set(i, updated);
+        save();
+        return true;
+    }
+
+    public synchronized boolean remove(String contact) {
+        reloadIfChanged();
+        int i = indexOfContact(contact);
+        if (i < 0) {
+            return false;
+        }
+        User u = users.remove(i);
+        save();
+        System.out.println("Удалён из базы: " + u.getName());
+        return true;
+    }
+
+    public synchronized void clearUsers() {
+        reloadIfChanged();
+        users.clear();
+        save();
+    }
